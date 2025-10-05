@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Film Production Management System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        /* ========== LOGIN PAGE ========== */
+        #loginPage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s; }
+        #loginPage.hidden { display: none; }
+        
+        .grid-container { position: fixed; inset: 0; z-index: 1; transition: opacity 2.5s; }
+        #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 2px; width: 100%; height: 100%; padding: 5px; }
+        .grid-item { background: rgba(40,40,40,0.6); border: 1px solid rgba(100,100,100,0.3); border-radius: 2px; transition: all 0.3s; animation: breathe 4s ease-in-out infinite; }
+        @keyframes breathe { 0%, 100% { box-shadow: 0 0 1px rgba(0,123,255,0.03); } 50% { box-shadow: 0 0 4px rgba(0,123,255,0.15); } }
+        .grid-item.active { background: rgba(0,150,255,0.9); box-shadow: 0 0 30px rgba(0,212,255,0.8); transform: scale(1.1); animation: none; }
+
+        #particleCanvas { position: fixed; inset: 0; z-index: 10; display: none; transition: opacity 1s; }
+
+        .login-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 150px; height: 60px; padding: 15px 20px; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border: 2px solid rgba(0,150,255,0.6); border-radius: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.3); cursor: pointer; transition: all 0.5s; z-index: 5; }
+        .login-box.expanded { width: 400px; max-width: 90%; height: auto; padding: 40px; }
+        .login-title { color: #00d4ff; font-size: 20px; font-weight: bold; text-align: center; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
+        .login-form { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .login-box.expanded .login-title { display: none; }
+        .login-box.expanded .login-form { opacity: 1; pointer-events: all; }
+
+        /* ========== APP PAGE ========== */
+        #appPage { display: none; min-height: 100vh; background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%); }
+        #appPage.active { display: block; }
+
+        .navbar { background: rgba(20,20,30,0.95); border-bottom: 1px solid rgba(0,150,255,0.2); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 50; }
+        .navbar h1 { color: #00d4ff; font-size: 1.5rem; }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+        .hero-section { text-align: center; padding: 3rem 0 2rem; }
+        .hero-section h2 { color: #00d4ff; font-size: 2.5rem; margin-bottom: 2rem; text-shadow: 0 0 20px rgba(0,212,255,0.3); }
+        .project-actions { display: flex; gap: 1rem; justify-content: center; margin: 2rem 0; }
+
+        .workflow-tabs { display: flex; gap: 0.5rem; margin: 2rem 0; border-bottom: 2px solid rgba(0,150,255,0.2); }
+        .workflow-tab { padding: 12px 24px; background: transparent; color: rgba(255,255,255,0.6); border: none; border-bottom: 3px solid transparent; cursor: pointer; transition: all 0.3s; font-weight: 600; }
+        .workflow-tab.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+        .workflow-tab:hover { color: #fff; }
+
+        .projects-section { margin: 3rem 0; }
+        .projects-section h3 { color: #00d4ff; font-size: 1.8rem; margin-bottom: 1.5rem; text-align: center; }
+        .projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+        
+        .project-card { background: rgba(30,30,40,0.95); border: 1px solid rgba(0,150,255,0.3); border-radius: 12px; padding: 1.5rem; cursor: pointer; transition: all 0.3s; position: relative; }
+        .project-card:hover { border-color: #007bff; transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,150,255,0.4); }
+        .project-card h4 { color: #00d4ff; font-size: 1.3rem; margin-bottom: 0.5rem; }
+        .project-card .project-meta { color: rgba(255,255,255,0.6); font-size: 0.9rem; margin: 0.5rem 0; }
+        .project-card .scene-count { background: rgba(0,150,255,0.2); color: #00d4ff; padding: 4px 12px; border-radius: 12px; display: inline-block; margin-top: 0.5rem; font-size: 0.85rem; }
+
+        .card { background: rgba(30,30,40,0.95); border: 1px solid rgba(0,150,255,0.3); border-radius: 12px; padding: 2rem; margin: 1rem 0; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,150,255,0.2); }
+        .card h2 { color: #00d4ff; font-size: 1.8rem; }
+
+        .scene-card { background: rgba(20,20,30,0.9); border: 1px solid rgba(0,150,255,0.2); border-radius: 8px; padding: 1.5rem; margin: 1rem 0; transition: all 0.3s; }
+        .scene-card:hover { border-color: rgba(0,150,255,0.5); box-shadow: 0 5px 20px rgba(0,150,255,0.2); }
+        .scene-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(0,150,255,0.2); }
+        .scene-number { background: linear-gradient(135deg, #007bff, #00d4ff); color: #fff; padding: 8px 16px; border-radius: 20px; font-weight: bold; display: inline-block; }
+
+        .metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .metadata-item { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; border-left: 3px solid #007bff; }
+        .metadata-label { color: #00d4ff; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; }
+        .metadata-value { color: rgba(255,255,255,0.9); font-size: 0.95rem; word-break: break-word; }
+
+        .budget-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; margin: 1rem 0; }
+        .budget-input-group { display: flex; flex-direction: column; }
+        .budget-input-group label { color: #00d4ff; font-size: 0.85rem; margin-bottom: 0.3rem; }
+        .budget-input-group input { padding: 8px; background: rgba(50,50,60,0.8); border: 1px solid rgba(100,100,100,0.3); border-radius: 6px; color: #fff; }
+
+        .section-divider { margin: 2rem 0; border-top: 1px solid rgba(0,150,255,0.2); }
+        .section-title { color: #00d4ff; font-size: 1.2rem; margin: 1.5rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        input, textarea, select { width: 100%; padding: 12px; margin-bottom: 1rem; border: 1px solid rgba(100,100,100,0.3); border-radius: 8px; background: rgba(50,50,60,0.8); color: #fff; font-size: 14px; font-family: inherit; transition: all 0.3s; }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: #007bff; box-shadow: 0 0 10px rgba(0,123,255,0.3); background: rgba(60,60,70,0.9); }
+        textarea { min-height: 80px; resize: vertical; }
+
+        button { padding: 12px 24px; background: #007bff; color: #fff; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; font-size: 14px; }
+        button:hover { background: #0056b3; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,123,255,0.4); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: rgba(100,100,100,0.5); }
+        .btn-secondary:hover { background: rgba(100,100,100,0.7); }
+        .btn-danger { background: rgba(220,53,69,0.8); }
+        .btn-danger:hover { background: rgba(220,53,69,1); }
+        .btn-success { background: rgba(40,167,69,0.8); }
+        .btn-success:hover { background: rgba(40,167,69,1); }
+
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); }
+        .modal.active { display: flex; }
+        .modal-content { background: rgba(20,20,30,0.98); border: 2px solid rgba(0,150,255,0.4); border-radius: 16px; padding: 2rem; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; }
+        .modal-content h2 { color: #00d4ff; margin-bottom: 1.5rem; }
+
+        .hidden { display: none !important; }
+        
+        .error { background: rgba(255,0,0,0.1); border: 1px solid rgba(255,0,0,0.3); color: #ff4444; padding: 12px; border-radius: 8px; margin-bottom: 1rem; }
+        .success { background: rgba(0,255,0,0.1); border: 1px solid rgba(0,255,0,0.3); color: #44ff44; padding: 12px; border-radius: 8px; margin-bottom: 1rem; }
+        .warning { background: rgba(255,193,7,0.1); border: 1px solid rgba(255,193,7,0.3); color: #ffc107; padding: 12px; border-radius: 8px; margin-bottom: 1rem; }
+        .info { background: rgba(0,150,255,0.1); border: 1px solid rgba(0,150,255,0.3); color: #00d4ff; padding: 12px; border-radius: 8px; margin-bottom: 1rem; }
+
+        .loader { border: 4px solid rgba(255,255,255,0.1); border-top: 4px solid #007bff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 2rem auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .toast { position: fixed; top: 20px; right: 20px; background: rgba(0,150,0,0.95); color: #fff; padding: 1rem 2rem; border-radius: 8px; z-index: 2000; box-shadow: 0 5px 20px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; }
+        .toast.error { background: rgba(220,53,69,0.95); }
+        @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; background: rgba(0,0,0,0.2); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(100,100,100,0.2); }
+        th { background: rgba(0,123,255,0.2); color: #00d4ff; font-weight: 600; }
+        tr:hover { background: rgba(0,150,255,0.05); }
+
+        .empty-state { text-align: center; padding: 3rem; color: rgba(255,255,255,0.5); }
+        .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+
+        .stat-box { background: linear-gradient(135deg, rgba(0,123,255,0.2), rgba(0,212,255,0.1)); border: 1px solid rgba(0,150,255,0.3); border-radius: 8px; padding: 1.5rem; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: bold; color: #00d4ff; margin-bottom: 0.5rem; }
+        .stat-label { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
+
+        @media (max-width: 768px) {
+            .navbar { flex-direction: column; gap: 1rem; }
+            .hero-section h2 { font-size: 2rem; }
+            .project-actions { flex-direction: column; width: 100%; }
+            .projects-grid { grid-template-columns: 1fr; }
+            .metadata-grid { grid-template-columns: 1fr; }
+            .workflow-tabs { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Login Page -->
+    <div id="loginPage">
+        <div class="grid-container" id="gridContainer">
+            <div id="grid"></div>
+        </div>
+        <div class="login-box" id="loginBox">
+            <div class="login-title">Log In</div>
+            <div class="login-form">
+                <h2 style="text-align: center; color: #007bff; margin-bottom: 2rem;">FILM STUDIO</h2>
+                <div id="loginError"></div>
+                <input type="email" id="loginEmail" placeholder="your@email.com">
+                <input type="password" id="loginPassword" placeholder="••••••••">
+                <button onclick="handleLogin()">Log In / Sign Up</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Page -->
+    <div id="appPage">
+        <nav class="navbar">
+            <h1>🎬 Film Production Management</h1>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <span id="userEmail" style="color: rgba(255,255,255,0.7);"></span>
+                <button onclick="logout()" class="btn-secondary">Logout</button>
+            </div>
+        </nav>
+
+        <div class="container">
+            <!-- Hero Section -->
+            <section class="hero-section" id="heroSection">
+                <h2>Welcome to Your Studio</h2>
+                <div class="project-actions">
+                    <button onclick="showCreateModal()">➕ Create New Project</button>
+                    <button onclick="showJoinModal()" class="btn-secondary">🚪 Join Existing Project</button>
+                </div>
+            </section>
+
+            <!-- Projects Section -->
+            <section class="projects-section" id="projectsSection">
+                <h3>Your Projects</h3>
+                <div id="projectsList" class="projects-grid"></div>
+            </section>
+
+            <!-- Project Detail View -->
+            <section class="hidden" id="projectDetailSection">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>📁 <span id="currentProjectName"></span></h2>
+                            <p style="color: rgba(255,255,255,0.6); margin-top: 0.5rem;">Complete Production Workflow</p>
+                        </div>
+                        <button onclick="closeProjectDetail()" class="btn-secondary">← Back to Projects</button>
+                    </div>
+
+                    <!-- Workflow Tabs -->
+                    <div class="workflow-tabs">
+                        <button class="workflow-tab active" onclick="switchTab('analysis')">📝 Script Analysis</button>
+                        <button class="workflow-tab" onclick="switchTab('scenes')">🎬 Scene Management</button>
+                        <button class="workflow-tab" onclick="switchTab('budget')">💰 Budget Planning</button>
+                    </div>
+
+                    <!-- Analysis Tab -->
+                    <div id="analysisTab" class="workflow-content">
+                        <div style="background: rgba(0,150,255,0.05); padding: 2rem; border-radius: 8px; margin: 2rem 0;">
+                            <h3 style="color: #00d4ff; margin-bottom: 1rem;">📄 Upload Script for AI Analysis</h3>
+                            <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">Upload your script (.txt file) to analyze it into comprehensive scene breakdowns.</p>
+                            <div id="scriptError"></div>
+                            <input type="file" id="scriptFile" accept=".txt" style="max-width: 500px;">
+                            <button onclick="analyzeScript()" style="margin-top: 1rem;">🔍 Analyze Script</button>
+                            <div id="loadingIndicator" class="hidden">
+                                <div class="loader"></div>
+                                <p style="text-align: center; color: rgba(255,255,255,0.6);">Analyzing script with Gemini AI...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scenes Tab -->
+                    <div id="scenesTab" class="workflow-content hidden">
+                        <div id="scenesList"></div>
+                    </div>
+
+                    <!-- Budget Tab -->
+                    <div id="budgetTab" class="workflow-content hidden">
+                        <div class="info" style="margin: 2rem 0;">
+                            💡 Set budget estimates for each scene by department. This helps track costs during production.
+                        </div>
+                        
+                        <div style="background: rgba(0,150,255,0.05); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+                            <label style="display: block; color: #00d4ff; margin-bottom: 0.5rem; font-weight: 600;">Select Scene for Budget Planning</label>
+                            <select id="budgetSceneSelector" onchange="loadBudgetForScene()" style="max-width: 500px;">
+                                <option value="">Choose a scene...</option>
+                            </select>
+                        </div>
+
+                        <div id="budgetFormContainer" class="hidden">
+                            <h3 id="budgetSceneTitle" style="color: #00d4ff; margin-bottom: 1.5rem;"></h3>
+                            
+                            <div id="budgetInputsContainer"></div>
+                            
+                            <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                                <button onclick="saveBudgetForScene()" class="btn-success">💾 Save Budget for This Scene</button>
+                                <button onclick="viewBudgetSummary()">📊 View Budget Summary</button>
+                            </div>
+                        </div>
+
+                        <div id="budgetSummaryContainer" class="hidden" style="margin-top: 3rem;">
+                            <h3 style="color: #00d4ff; margin-bottom: 1.5rem;">📊 Project Budget Summary</h3>
+                            <div id="budgetSummaryStats" class="metadata-grid"></div>
+                            <div id="budgetSummaryTable"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="createModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2>Create New Project</h2>
+            <div id="createError"></div>
+            <label style="display: block; color: #00d4ff; margin-bottom: 0.5rem;">Project Name</label>
+            <input type="text" id="createProjectName" placeholder="Enter unique project name">
+            <label style="display: block; color: #00d4ff; margin-bottom: 0.5rem;">Passkey (min 4 characters)</label>
+            <input type="password" id="createPasskey" placeholder="Enter project passkey">
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick="createProject()">Create Project</button>
+                <button onclick="closeModal('createModal')" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="joinModal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h2>Join Existing Project</h2>
+            <div id="joinError"></div>
+            <label style="display: block; color: #00d4ff; margin-bottom: 0.5rem;">Project Name</label>
+            <input type="text" id="joinProjectName" placeholder="Enter project name">
+            <label style="display: block; color: #00d4ff; margin-bottom: 0.5rem;">Passkey</label>
+            <input type="password" id="joinPasskey" placeholder="Enter project passkey">
+            <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick="joinProject()">Join Project</button>
+                <button onclick="closeModal('joinModal')" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="sceneEditorModal">
+        <div class="modal-content">
+            <h2>Edit Scene <span id="editSceneNumber"></span></h2>
+            <div id="sceneEditorContent"></div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                <button onclick="saveSceneData()">💾 Save Changes</button>
+                <button onclick="closeModal('sceneEditorModal')" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== CONFIGURATION ====================
+        const SUPABASE_URL = 'https://teveaeieqejtofhasqae.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRldmVhZWllcWVqdG9maGFzcWFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2MTIzMzIsImV4cCI6MjA3NTE4ODMzMn0._utlaOZt5PdH42p4HiYFQsDZPVaJjvkiq92KJCMlchw';
+        const GEMINI_KEY = 'AIzaSyDxy0i7x9uq0e6FISvnZxyaHwNGP-y2MgM';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentUser = null;
+        let currentProject = null;
+        let currentEditingScene = null;
+        let userProjects = [];
+        let projectScenes = [];
+        let currentTab = 'analysis';
+
+        const DEPARTMENTS = ['Camera', 'Lighting', 'Sound', 'Art Department', 'Costumes', 'Makeup & Hair', 'Props', 'Location', 'Cast', 'Crew', 'Equipment Rental', 'Transportation', 'Catering', 'Post-Production', 'Miscellaneous'];
+
+        // ==================== GRID ANIMATION ====================
+        function createGrid() {
+            const grid = document.getElementById('grid');
+            const cols = Math.floor(window.innerWidth / 62);
+            const rows = Math.floor(window.innerHeight / 62);
+            grid.innerHTML = '';
+            for (let i = 0; i < cols * rows; i++) {
+                const item = document.createElement('div');
+                item.className = 'grid-item';
+                grid.appendChild(item);
+            }
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            const elements = document.elementsFromPoint(e.clientX, e.clientY);
+            const gridItem = elements.find(el => el.classList?.contains('grid-item'));
+            document.querySelectorAll('.grid-item').forEach(i => i.classList.remove('active'));
+            if (gridItem) gridItem.classList.add('active');
+        });
+
+        const loginBox = document.getElementById('loginBox');
+        let collapseTimeout;
+        loginBox.addEventListener('mouseenter', () => {
+            clearTimeout(collapseTimeout);
+            loginBox.classList.add('expanded');
+        });
+        loginBox.addEventListener('mouseleave', () => {
+            collapseTimeout = setTimeout(() => loginBox.classList.remove('expanded'), 500);
+        });
+
+        // Particle System
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 4 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1;
+                this.size = 2;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                this.life -= 0.02;
+            }
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 150, 255, ${this.life})`;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = `rgba(0, 150, 255, ${this.life})`;
+                ctx.fill();
+            }
+        }
+
+        let particles = [];
+        let animationId = null;
+
+        function animateParticles() {
+            const canvas = document.getElementById('particleCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => { p.update(); p.draw(ctx); });
+            animationId = requestAnimationFrame(animateParticles);
+        }
+
+        function startDissolve() {
+            const canvas = document.getElementById('particleCanvas');
+            const grid = document.getElementById('gridContainer');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            canvas.style.display = 'block';
+
+            document.querySelectorAll('.grid-item').forEach(item => {
+                const rect = item.getBoundingClientRect();
+                particles.push(new Particle(rect.left + rect.width/2, rect.top + rect.height/2));
+            });
+
+            animateParticles();
+            setTimeout(() => {
+                grid.style.opacity = '0';
+                loginBox.style.opacity = '0';
+            }, 100);
+
+            setTimeout(() => {
+                canvas.style.opacity = '0';
+                setTimeout(() => {
+                    if (animationId) cancelAnimationFrame(animationId);
+                    document.getElementById('loginPage').classList.add('hidden');
+                    document.getElementById('appPage').classList.add('active');
+                }, 1000);
+            }, 2000);
+        }
+
+        // ==================== AUTHENTICATION ====================
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!email || !password) {
+                errorDiv.innerHTML = '<div class="error">Please enter email and password</div>';
+                return;
+            }
+
+            try {
+                let result = await supabase.auth.signInWithPassword({ email, password });
+                
+                if (result.error && result.error.message.includes('Invalid')) {
+                    await supabase.auth.signUp({ email, password });
+                    result = await supabase.auth.signInWithPassword({ email, password });
+                }
+                
+                if (result.error) throw result.error;
+                
+                currentUser = result.data.user;
+                document.getElementById('userEmail').textContent = email;
+                startDissolve();
+                await loadUserProjects();
+            } catch (error) {
+                errorDiv.innerHTML = `<div class="error">${error.message}</div>`;
+            }
+        }
+
+        async function logout() {
+            await supabase.auth.signOut();
+            location.reload();
+        }
+
+        // ==================== PROJECT MANAGEMENT ====================
+        async function loadUserProjects() {
+            try {
+                const { data, error } = await supabase
+                    .from('projects')
+                    .select('*, scenes(count)')
+                    .eq('creator_id', currentUser.id)
+                    .order('updated_at', { ascending: false });
+
+                if (error) throw error;
+
+                userProjects = data || [];
+                displayProjects();
+            } catch (error) {
+                console.error('Error loading projects:', error);
+                showToast('Failed to load projects', 'error');
+            }
+        }
+
+        function displayProjects() {
+            const container = document.getElementById('projectsList');
+            
+            if (userProjects.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-state-icon">📁</div>
+                        <p>No projects yet. Create your first project above!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = userProjects.map(project => `
+                <div class="project-card" onclick="openProject('${project.id}', '${escapeHtml(project.name)}')">
+                    <h4>🎬 ${escapeHtml(project.name)}</h4>
+                    <div class="project-meta">Created: ${new Date(project.created_at).toLocaleDateString()}</div>
+                    <div class="project-meta">Last updated: ${new Date(project.updated_at).toLocaleDateString()}</div>
+                    <span class="scene-count">${project.scenes?.[0]?.count || 0} scenes</span>
+                </div>
+            `).join('');
+        }
+
+        function showCreateModal() {
+            document.getElementById('createProjectName').value = '';
+            document.getElementById('createPasskey').value = '';
+            document.getElementById('createError').innerHTML = '';
+            document.getElementById('createModal').classList.add('active');
+        }
+
+        function showJoinModal() {
+            document.getElementById('joinProjectName').value = '';
+            document.getElementById('joinPasskey').value = '';
+            document.getElementById('joinError').innerHTML = '';
+            document.getElementById('joinModal').classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        async function createProject() {
+            const name = document.getElementById('createProjectName').value.trim();
+            const passkey = document.getElementById('createPasskey').value.trim();
+            const errorDiv = document.getElementById('createError');
+
+            if (!name || name.length < 3) {
+                errorDiv.innerHTML = '<div class="error">Project name must be at least 3 characters</div>';
+                return;
+            }
+
+            if (!passkey || passkey.length < 4) {
+                errorDiv.innerHTML = '<div class="error">Passkey must be at least 4 characters</div>';
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('projects')
+                    .insert([{ name, passkey, creator_id: currentUser.id }])
+                    .select();
+
+                if (error) throw error;
+
+                closeModal('createModal');
+                showToast('Project created successfully!');
+                await loadUserProjects();
+                openProject(data[0].id, data[0].name);
+            } catch (error) {
+                if (error.message.includes('duplicate') || error.message.includes('unique')) {
+                    errorDiv.innerHTML = '<div class="error">Project name already exists</div>';
+                } else {
+                    errorDiv.innerHTML = `<div class="error">${error.message}</div>`;
+                }
+            }
+        }
+
+        async function joinProject() {
+            const name = document.getElementById('joinProjectName').value.trim();
+            const passkey = document.getElementById('joinPasskey').value.trim();
+            const errorDiv = document.getElementById('joinError');
+
+            if (!name || !passkey) {
+                errorDiv.innerHTML = '<div class="error">Please fill all fields</div>';
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('projects')
+                    .select('*')
+                    .eq('name', name)
+                    .eq('passkey', passkey)
+                    .single();
+
+                if (error) throw error;
+
+                closeModal('joinModal');
+                showToast('Joined project successfully!');
+                openProject(data.id, data.name);
+            } catch (error) {
+                errorDiv.innerHTML = '<div class="error">Project not found or incorrect passkey</div>';
+            }
+        }
+
+        async function openProject(id, name) {
+            currentProject = { id, name };
+            document.getElementById('currentProjectName').textContent = name;
+            document.getElementById('heroSection').classList.add('hidden');
+            document.getElementById('projectsSection').classList.add('hidden');
+            document.getElementById('projectDetailSection').classList.remove('hidden');
+            document.getElementById('scriptFile').value = '';
+            document.getElementById('scriptError').innerHTML = '';
+            await loadScenes();
+            switchTab('analysis');
+        }
+
+        function closeProjectDetail() {
+            document.getElementById('heroSection').classList.remove('hidden');
+            document.getElementById('projectsSection').classList.remove('hidden');
+            document.getElementById('projectDetailSection').classList.add('hidden');
+            currentProject = null;
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.workflow-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.workflow-content').forEach(c => c.classList.add('hidden'));
+            
+            // Find and activate the correct tab button
+            const tabs = document.querySelectorAll('.workflow-tab');
+            tabs.forEach((t, i) => {
+                const tabNames = ['analysis', 'scenes', 'budget'];
+                if (tabNames[i] === tab) {
+                    t.classList.add('active');
+                }
+            });
+            
+            document.getElementById(`${tab}Tab`).classList.remove('hidden');
+
+            if (tab === 'scenes') {
+                loadScenes();
+            } else if (tab === 'budget') {
+                loadBudgetTab();
+            }
+        }
+
+        // ==================== SCRIPT ANALYSIS ====================
+        async function analyzeScript() {
+            const file = document.getElementById('scriptFile').files[0];
+            const errorDiv = document.getElementById('scriptError');
+
+            if (!file) {
+                errorDiv.innerHTML = '<div class="error">Please upload a script file</div>';
+                return;
+            }
+
+            if (!file.name.endsWith('.txt')) {
+                errorDiv.innerHTML = '<div class="error">Please upload a .txt file</div>';
+                return;
+            }
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            errorDiv.innerHTML = '';
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const scriptText = e.target.result;
+
+                if (!scriptText.trim()) {
+                    errorDiv.innerHTML = '<div class="error">Script file is empty</div>';
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                    return;
+                }
+
+                try {
+                    const scenes = await callGeminiAPI(scriptText);
+
+                    for (const scene of scenes) {
+                        await supabase.from('scenes').insert([{
+                            project_id: currentProject.id,
+                            scene_number: scene.scene_number,
+                            heading: scene.heading || '',
+                            page_location: scene.page_location || '',
+                            duration: scene.duration || '',
+                            location_type: scene.location_type || '',
+                            specific_location: scene.specific_location || '',
+                            time_of_day: scene.time_of_day || '',
+                            lighting: scene.lighting || '',
+                            weather: scene.weather || '',
+                            characters_present: scene.characters_present || '',
+                            speaking_roles: scene.speaking_roles || '',
+                            extras: scene.extras || '',
+                            character_objectives: scene.character_objectives || '',
+                            emotional_states: scene.emotional_states || '',
+                            functional_props: scene.functional_props || '',
+                            decorative_props: scene.decorative_props || '',
+                            special_items: scene.special_items || '',
+                            documents: scene.documents || '',
+                            camera_movement: scene.camera_movement || '',
+                            framing: scene.framing || '',
+                            focus_points: scene.focus_points || '',
+                            lighting_mood: scene.lighting_mood || '',
+                            transitions: scene.transitions || '',
+                            diegetic_sounds: scene.diegetic_sounds || '',
+                            non_diegetic_sounds: scene.non_diegetic_sounds || '',
+                            dialogue_tone: scene.dialogue_tone || '',
+                            silence_moments: scene.silence_moments || '',
+                            primary_action: scene.primary_action || '',
+                            secondary_action: scene.secondary_action || '',
+                            micro_actions: scene.micro_actions || '',
+                            conflict_event: scene.conflict_event || '',
+                            pacing: scene.pacing || '',
+                            scene_mood: scene.scene_mood || '',
+                            emotional_arc: scene.emotional_arc || '',
+                            genre_signature: scene.genre_signature || '',
+                            shoot_type: scene.shoot_type || '',
+                            estimated_duration: scene.estimated_duration || '',
+                            required_crew: scene.required_crew || '',
+                            continuity_links: scene.continuity_links || '',
+                            special_requirements: scene.special_requirements || '',
+                            scene_type: scene.scene_type || '',
+                            narrative_function: scene.narrative_function || '',
+                            cost_estimation: scene.cost_estimation || '',
+                            cast_cost: scene.cast_cost || '',
+                            crew_cost: scene.crew_cost || '',
+                            location_cost: scene.location_cost || '',
+                            props_cost: scene.props_cost || '',
+                            wardrobe_cost: scene.wardrobe_cost || '',
+                            equipment_cost: scene.equipment_cost || '',
+                            logistics_cost: scene.logistics_cost || '',
+                            post_cost: scene.post_cost || '',
+                            content: scene.content || ''
+                        }]);
+                    }
+
+                    await supabase.from('projects').update({ updated_at: new Date() }).eq('id', currentProject.id);
+                    
+                    showToast(`Successfully analyzed ${scenes.length} scenes!`);
+                    await loadScenes();
+                    await loadUserProjects();
+                    switchTab('scenes');
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    errorDiv.innerHTML = `<div class="error">Analysis failed: ${error.message}</div>`;
+                } finally {
+                    document.getElementById('loadingIndicator').classList.add('hidden');
+                }
+            };
+
+            reader.onerror = () => {
+                errorDiv.innerHTML = '<div class="error">Failed to read file</div>';
+                document.getElementById('loadingIndicator').classList.add('hidden');
+            };
+
+            reader.readAsText(file);
+        }
+
+        async function callGeminiAPI(scriptText) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `Analyze this film script and divide it into the MAXIMUM number of distinct scenes. For each scene provide comprehensive analysis.
+
+SCRIPT:
+${scriptText.substring(0, 15000)}
+
+Return ONLY a valid JSON array with this exact structure (no markdown, no code blocks):
+[
+  {
+    "scene_number": 1,
+    "heading": "INT. OFFICE - DAY",
+    "page_location": "Page 1",
+    "duration": "2 minutes",
+    "location_type": "Interior",
+    "specific_location": "Corporate Office",
+    "time_of_day": "Day",
+    "lighting": "Natural daylight",
+    "weather": "Clear",
+    "characters_present": "John, Sarah",
+    "speaking_roles": "John, Sarah",
+    "extras": "Office workers",
+    "character_objectives": "John wants promotion",
+    "emotional_states": "Anxious, hopeful",
+    "functional_props": "Desk, computer",
+    "decorative_props": "Plant, photos",
+    "special_items": "Contract document",
+    "documents": "Employment contract",
+    "camera_movement": "Dolly in",
+    "framing": "Medium shot",
+    "focus_points": "Character faces",
+    "lighting_mood": "Professional, bright",
+    "transitions": "Cut to next scene",
+    "diegetic_sounds": "Keyboard typing, phone ring",
+    "non_diegetic_sounds": "Background music",
+    "dialogue_tone": "Professional, tense",
+    "silence_moments": "Pause before decision",
+    "primary_action": "Contract signing",
+    "secondary_action": "Coffee drinking",
+    "micro_actions": "Pen clicking",
+    "conflict_event": "Disagreement on terms",
+    "pacing": "Moderate",
+    "scene_mood": "Tense anticipation",
+    "emotional_arc": "Anxiety to relief",
+    "genre_signature": "Drama",
+    "shoot_type": "Studio",
+    "estimated_duration": "Half day",
+    "required_crew": "Director, DP, Sound",
+    "continuity_links": "Follows scene 1",
+    "special_requirements": "None",
+    "scene_type": "Dialogue",
+    "narrative_function": "Plot development",
+    "cost_estimation": "Medium",
+    "cast_cost": "₹50,000",
+    "crew_cost": "₹30,000",
+    "location_cost": "₹20,000",
+    "props_cost": "₹10,000",
+    "wardrobe_cost": "₹15,000",
+    "equipment_cost": "₹40,000",
+    "logistics_cost": "₹25,000",
+    "post_cost": "₹20,000",
+    "content": "Full dialogue and action description here"
+  }
+]`
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.4,
+                        topP: 0.95,
+                        topK: 40,
+                        maxOutputTokens: 8192
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API error: ${response.status} - ${errorText}`);
+            }
+            
+            const result = await response.json();
+            const text = result.candidates[0].content.parts[0].text;
+            
+            // Remove markdown code blocks if present
+            const cleanText = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            
+            // Find JSON array
+            const jsonMatch = cleanText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if (!jsonMatch) {
+                throw new Error('No valid JSON array found in response');
+            }
+            
+            return JSON.parse(jsonMatch[0]);
+        }
+
+        // ==================== SCENE MANAGEMENT ====================
+        async function loadScenes() {
+            try {
+                const { data, error } = await supabase
+                    .from('scenes')
+                    .select('*')
+                    .eq('project_id', currentProject.id)
+                    .order('scene_number');
+
+                if (error) throw error;
+
+                projectScenes = data || [];
+                displayScenes(projectScenes);
+            } catch (error) {
+                console.error('Error loading scenes:', error);
+            }
+        }
+
+        function displayScenes(scenes) {
+            const container = document.getElementById('scenesList');
+
+            if (scenes.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🎬</div>
+                        <p>No scenes analyzed yet. Upload a script in the Analysis tab to get started.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <h3 class="section-title">
+                    <span>📊 Scene Analysis Results</span>
+                    <span style="color: rgba(255,255,255,0.6); font-size: 0.9rem; font-weight: normal;">Total: ${scenes.length} scenes</span>
+                </h3>
+                ${scenes.map(scene => renderScene(scene)).join('')}
+            `;
+        }
+
+        function renderScene(scene) {
+            const undefinedFields = getUndefinedFields(scene);
+            const hasUndefined = undefinedFields.length > 0;
+
+            return `
+                <div class="scene-card">
+                    <div class="scene-header">
+                        <div>
+                            <span class="scene-number">Scene ${scene.scene_number}</span>
+                            <h3 style="color: #fff; margin-top: 0.5rem;">${escapeHtml(scene.heading || 'Untitled Scene')}</h3>
+                        </div>
+                        <div style="text-align: right;">
+                            <button onclick="editScene('${scene.id}')" style="padding: 8px 16px;">
+                                ${hasUndefined ? '⚠️ Complete Data (' + undefinedFields.length + ')' : '✏️ Edit Scene'}
+                            </button>
+                            <button onclick="deleteScene('${scene.id}')" class="btn-danger" style="padding: 8px 16px; margin-left: 0.5rem;">🗑️</button>
+                        </div>
+                    </div>
+
+                    ${hasUndefined ? `<div class="warning">⚠️ ${undefinedFields.length} field(s) need completion</div>` : ''}
+
+                    <h4 class="section-title">🌍 Location & Setting</h4>
+                    <div class="metadata-grid">
+                        <div class="metadata-item"><div class="metadata-label">Location Type</div><div class="metadata-value">${scene.location_type || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Specific Location</div><div class="metadata-value">${scene.specific_location || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Time of Day</div><div class="metadata-value">${scene.time_of_day || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Lighting</div><div class="metadata-value">${scene.lighting || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Weather</div><div class="metadata-value">${scene.weather || 'N/A'}</div></div>
+                    </div>
+
+                    <h4 class="section-title">🎭 Characters</h4>
+                    <div class="metadata-grid">
+                        <div class="metadata-item"><div class="metadata-label">Present</div><div class="metadata-value">${scene.characters_present || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Speaking</div><div class="metadata-value">${scene.speaking_roles || 'N/A'}</div></div>
+                        <div class="metadata-item"><div class="metadata-label">Extras</div><div class="metadata-value">${scene.extras || 'N/A'}</div></div>
+                    </div>
+
+                    <h4 class="section-title">💰 AI Budget Estimate</h4>
+                    <table>
+                        <tr><td>Cast & Talent</td><td>${scene.cast_cost || 'N/A'}</td></tr>
+                        <tr><td>Crew & Labor</td><td>${scene.crew_cost || 'N/A'}</td></tr>
+                        <tr><td>Locations</td><td>${scene.location_cost || 'N/A'}</td></tr>
+                        <tr><td>Props & Art</td><td>${scene.props_cost || 'N/A'}</td></tr>
+                        <tr><td>Equipment</td><td>${scene.equipment_cost || 'N/A'}</td></tr>
+                        <tr><td>Post-Production</td><td>${scene.post_cost || 'N/A'}</td></tr>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function editScene(id) {
+            try {
+                const { data, error } = await supabase
+                    .from('scenes')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+
+                if (error) throw error;
+
+                currentEditingScene = data;
+                showSceneEditor(data);
+            } catch (error) {
+                showToast('Failed to load scene', 'error');
+            }
+        }
+
+        function showSceneEditor(scene) {
+            const fields = [
+                { key: 'heading', label: 'Scene Heading', section: 'Basic' },
+                { key: 'page_location', label: 'Page Location', section: 'Basic' },
+                { key: 'duration', label: 'Duration', section: 'Basic' },
+                { key: 'location_type', label: 'Location Type', section: 'Location' },
+                { key: 'specific_location', label: 'Specific Location', section: 'Location' },
+                { key: 'time_of_day', label: 'Time of Day', section: 'Location' },
+                { key: 'lighting', label: 'Lighting', section: 'Location' },
+                { key: 'weather', label: 'Weather', section: 'Location' },
+                { key: 'characters_present', label: 'Characters Present', section: 'Characters' },
+                { key: 'speaking_roles', label: 'Speaking Roles', section: 'Characters' },
+                { key: 'extras', label: 'Extras', section: 'Characters' },
+                { key: 'character_objectives', label: 'Objectives', section: 'Characters' },
+                { key: 'emotional_states', label: 'Emotional States', section: 'Characters' },
+                { key: 'functional_props', label: 'Functional Props', section: 'Props' },
+                { key: 'decorative_props', label: 'Decorative Props', section: 'Props' },
+                { key: 'special_items', label: 'Special Items', section: 'Props' },
+                { key: 'documents', label: 'Documents', section: 'Props' },
+                { key: 'cast_cost', label: 'Cast Cost', section: 'Budget' },
+                { key: 'crew_cost', label: 'Crew Cost', section: 'Budget' },
+                { key: 'location_cost', label: 'Location Cost', section: 'Budget' },
+                { key: 'props_cost', label: 'Props Cost', section: 'Budget' },
+                { key: 'wardrobe_cost', label: 'Wardrobe Cost', section: 'Budget' },
+                { key: 'equipment_cost', label: 'Equipment Cost', section: 'Budget' },
+                { key: 'logistics_cost', label: 'Logistics Cost', section: 'Budget' },
+                { key: 'post_cost', label: 'Post-Production Cost', section: 'Budget' },
+                { key: 'content', label: 'Scene Content', section: 'Content' }
+            ];
+
+            const sections = {};
+            fields.forEach(f => {
+                if (!sections[f.section]) sections[f.section] = [];
+                sections[f.section].push(f);
+            });
+
+            let html = '';
+            for (const [section, sectionFields] of Object.entries(sections)) {
+                html += `<h4 class="section-title">${section}</h4>`;
+                sectionFields.forEach(f => {
+                    const value = scene[f.key] || '';
+                    const isUndefined = !value || value === 'N/A' || value.toLowerCase().includes('not specified');
+                    const rows = f.key === 'content' ? 8 : 2;
+                    html += `
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; color: ${isUndefined ? '#ffc107' : '#00d4ff'}; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                                ${isUndefined ? '⚠️ ' : ''}${f.label}
+                            </label>
+                            <textarea id="field_${f.key}" rows="${rows}" placeholder="Enter ${f.label.toLowerCase()}..." style="background: ${isUndefined ? 'rgba(255,193,7,0.1)' : 'rgba(50,50,60,0.8)'}; border-color: ${isUndefined ? '#ffc107' : 'rgba(100,100,100,0.3)'}">${escapeHtml(value)}</textarea>
+                        </div>
+                    `;
+                });
+            }
+
+            document.getElementById('editSceneNumber').textContent = scene.scene_number;
+            document.getElementById('sceneEditorContent').innerHTML = html;
+            document.getElementById('sceneEditorModal').classList.add('active');
+        }
+
+        async function saveSceneData() {
+            const fields = ['heading', 'page_location', 'duration', 'location_type', 'specific_location', 'time_of_day', 'lighting', 'weather', 'characters_present', 'speaking_roles', 'extras', 'character_objectives', 'emotional_states', 'functional_props', 'decorative_props', 'special_items', 'documents', 'cast_cost', 'crew_cost', 'location_cost', 'props_cost', 'wardrobe_cost', 'equipment_cost', 'logistics_cost', 'post_cost', 'content'];
+
+            const updates = {};
+            fields.forEach(f => {
+                const el = document.getElementById(`field_${f}`);
+                if (el) updates[f] = el.value.trim();
+            });
+
+            try {
+                await supabase.from('scenes').update(updates).eq('id', currentEditingScene.id);
+                await supabase.from('projects').update({ updated_at: new Date() }).eq('id', currentProject.id);
+                
+                closeModal('sceneEditorModal');
+                showToast('Scene updated successfully!');
+                await loadScenes();
+                await loadUserProjects();
+            } catch (error) {
+                showToast('Failed to save changes', 'error');
+            }
+        }
+
+        async function deleteScene(id) {
+            if (!confirm('Are you sure you want to delete this scene?')) return;
+
+            try {
+                await supabase.from('scenes').delete().eq('id', id);
+                await supabase.from('projects').update({ updated_at: new Date() }).eq('id', currentProject.id);
+                
+                showToast('Scene deleted successfully!');
+                await loadScenes();
+                await loadUserProjects();
+            } catch (error) {
+                showToast('Failed to delete scene', 'error');
+            }
+        }
+
+        // ==================== BUDGET MANAGEMENT ====================
+        async function loadBudgetTab() {
+            const selector = document.getElementById('budgetSceneSelector');
+            
+            if (projectScenes.length === 0) {
+                await loadScenes();
+            }
+
+            if (projectScenes.length === 0) {
+                selector.innerHTML = '<option value="">No scenes available - analyze a script first</option>';
+                return;
+            }
+
+            selector.innerHTML = '<option value="">Choose a scene...</option>' +
+                projectScenes.map(s => `<option value="${s.id}">Scene ${s.scene_number}: ${escapeHtml(s.heading || 'Untitled')}</option>`).join('');
+        }
+
+        async function loadBudgetForScene() {
+            const sceneId = document.getElementById('budgetSceneSelector').value;
+            
+            if (!sceneId) {
+                document.getElementById('budgetFormContainer').classList.add('hidden');
+                return;
+            }
+
+            const scene = projectScenes.find(s => s.id === sceneId);
+            document.getElementById('budgetSceneTitle').textContent = `Budget Planning for Scene ${scene.scene_number}`;
+
+            try {
+                const { data: existingBudget, error } = await supabase
+                    .from('budget_tracking')
+                    .select('*')
+                    .eq('project_id', currentProject.id)
+                    .eq('scene_id', sceneId);
+
+                if (error) throw error;
+
+                const budgetMap = {};
+                if (existingBudget) {
+                    existingBudget.forEach(item => {
+                        budgetMap[item.department] = {
+                            estimated: item.estimated_cost / 100000,
+                            actual: item.actual_cost / 100000
+                        };
+                    });
+                }
+
+                const html = DEPARTMENTS.map(dept => {
+                    const saved = budgetMap[dept] || { estimated: '', actual: '' };
+                    const deptKey = dept.replace(/\s/g, '_').replace(/&/g, '');
+                    return `
+                        <div class="budget-grid" style="margin-bottom: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                            <div style="grid-column: 1/-1;">
+                                <h4 style="color: #00d4ff; margin-bottom: 0.5rem;">${dept}</h4>
+                            </div>
+                            <div class="budget-input-group">
+                                <label>Estimated Cost (₹ Lakhs)</label>
+                                <input type="number" id="est_${deptKey}" step="0.01" value="${saved.estimated}" placeholder="0.00">
+                            </div>
+                            <div class="budget-input-group">
+                                <label>Actual Cost (₹ Lakhs)</label>
+                                <input type="number" id="act_${deptKey}" step="0.01" value="${saved.actual}" placeholder="0.00">
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                document.getElementById('budgetInputsContainer').innerHTML = html;
+                document.getElementById('budgetFormContainer').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading budget:', error);
+                showToast('Failed to load budget data', 'error');
+            }
+        }
+
+        async function saveBudgetForScene() {
+            const sceneId = document.getElementById('budgetSceneSelector').value;
+            if (!sceneId) {
+                showToast('Please select a scene first', 'error');
+                return;
+            }
+
+            try {
+                // Delete existing budget items for this scene
+                const { error: deleteError } = await supabase
+                    .from('budget_tracking')
+                    .delete()
+                    .eq('project_id', currentProject.id)
+                    .eq('scene_id', sceneId);
+
+                if (deleteError) {
+                    console.error('Delete error:', deleteError);
+                }
+
+                const budgetItems = [];
+                
+                for (const dept of DEPARTMENTS) {
+                    const deptKey = dept.replace(/\s/g, '_').replace(/&/g, '');
+                    const estEl = document.getElementById(`est_${deptKey}`);
+                    const actEl = document.getElementById(`act_${deptKey}`);
+                    
+                    const estimated = parseFloat(estEl?.value || 0);
+                    const actual = parseFloat(actEl?.value || 0);
+
+                    if (estimated > 0 || actual > 0) {
+                        budgetItems.push({
+                            project_id: currentProject.id,
+                            scene_id: sceneId,
+                            department: dept,
+                            item_name: dept,
+                            quantity: 1,
+                            unit_cost: Math.round(estimated * 100000 * 100) / 100, // Round to 2 decimals
+                            estimated_cost: Math.round(estimated * 100000 * 100) / 100,
+                            actual_cost: Math.round(actual * 100000 * 100) / 100,
+                            created_by: currentUser.id,
+                            status: actual > 0 ? 'Completed' : 'Planned',
+                            payment_status: 'Unpaid'
+                        });
+                    }
+                }
+
+                if (budgetItems.length > 0) {
+                    const { data, error } = await supabase
+                        .from('budget_tracking')
+                        .insert(budgetItems)
+                        .select();
+                    
+                    if (error) {
+                        console.error('Insert error details:', error);
+                        throw error;
+                    }
+                    
+                    showToast(`Budget saved: ${budgetItems.length} items for scene ${projectScenes.find(s => s.id === sceneId).scene_number}!`);
+                } else {
+                    showToast('No budget items to save', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving budget:', error);
+                showToast(`Failed to save budget: ${error.message}`, 'error');
+            }
+        }
+
+        async function viewBudgetSummary() {
+            try {
+                const { data: allBudget, error } = await supabase
+                    .from('budget_tracking')
+                    .select('*')
+                    .eq('project_id', currentProject.id);
+
+                if (error) throw error;
+
+                const totalEstimated = allBudget.reduce((sum, item) => sum + (item.estimated_cost || 0), 0);
+                const totalActual = allBudget.reduce((sum, item) => sum + (item.actual_cost || 0), 0);
+                const variance = totalEstimated - totalActual;
+
+                const deptSummary = {};
+                allBudget.forEach(item => {
+                    if (!deptSummary[item.department]) {
+                        deptSummary[item.department] = { estimated: 0, actual: 0 };
+                    }
+                    deptSummary[item.department].estimated += item.estimated_cost || 0;
+                    deptSummary[item.department].actual += item.actual_cost || 0;
+                });
+
+                document.getElementById('budgetSummaryStats').innerHTML = `
+                    <div class="stat-box">
+                        <div class="stat-value">₹${(totalEstimated / 100000).toFixed(2)}L</div>
+                        <div class="stat-label">Total Estimated</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">₹${(totalActual / 100000).toFixed(2)}L</div>
+                        <div class="stat-label">Total Actual</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" style="color: ${variance >= 0 ? '#44ff44' : '#ff4444'}">₹${(variance / 100000).toFixed(2)}L</div>
+                        <div class="stat-label">Variance</div>
+                    </div>
+                `;
+
+                const tableRows = Object.entries(deptSummary).map(([dept, values]) => `
+                    <tr>
+                        <td>${dept}</td>
+                        <td>₹${(values.estimated / 100000).toFixed(2)}L</td>
+                        <td>₹${(values.actual / 100000).toFixed(2)}L</td>
+                        <td style="color: ${values.estimated - values.actual >= 0 ? '#44ff44' : '#ff4444'}">
+                            ₹${((values.estimated - values.actual) / 100000).toFixed(2)}L
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('budgetSummaryTable').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Estimated</th>
+                                <th>Actual</th>
+                                <th>Variance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                `;
+
+                document.getElementById('budgetSummaryContainer').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading budget summary:', error);
+                showToast('Failed to load budget summary', 'error');
+            }
+        }
+
+        // ==================== UTILITIES ====================
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getUndefinedFields(scene) {
+            const fields = ['heading', 'location_type', 'characters_present', 'duration', 'scene_mood', 'cast_cost'];
+            return fields.filter(f => !scene[f] || scene[f] === 'N/A' || scene[f].toLowerCase().includes('not specified'));
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // ==================== INITIALIZATION ====================
+        createGrid();
+        window.addEventListener('resize', createGrid);
+
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                currentUser = session.user;
+                document.getElementById('loginPage').classList.add('hidden');
+                document.getElementById('appPage').classList.add('active');
+                document.getElementById('userEmail').textContent = session.user.email;
+                loadUserProjects();
+            }
+        });
+    </script>
+</body>
+</html>
