@@ -209,11 +209,14 @@
                     <button onclick="joinProject()" class="btn-secondary">Join Existing Project</button>
 
                     <div id="scriptUpload" class="hidden">
-                        <h3>Upload Script for Analysis</h3>
-                        <p class="info">Script will be parsed automatically. Format: INT./EXT. LOCATION - TIME</p>
+                        <h3>Upload Script for AI Analysis</h3>
+                        <p class="info">Upload your script and let Gemini AI analyze it into detailed scenes</p>
                         <input type="file" id="scriptFile" accept=".txt">
-                        <button onclick="analyzeScript()">Analyze Script</button>
-                        <div id="analysisLoader" class="hidden"><div class="loader"></div></div>
+                        <button onclick="analyzeScript()">Analyze with Gemini AI</button>
+                        <div id="analysisLoader" class="hidden">
+                            <div class="loader"></div>
+                            <p style="text-align: center; color: rgba(255,255,255,0.6); margin-top: 1rem;">Analyzing script with Gemini AI...</p>
+                        </div>
                     </div>
                 </div>
 
@@ -337,6 +340,7 @@
     <script>
         const SUPABASE_URL = 'https://teveaeieqejtofhasqae.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRldmVhZWllcWVqdG9maGFzcWFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2MTIzMzIsImV4cCI6MjA3NTE4ODMzMn0._utlaOZt5PdH42p4HiYFQsDZPVaJjvkiq92KJCMlchw';
+        const GEMINI_API_KEY = 'AIzaSyBPCGMgMvUlViM519-WqC470QDc3lLqljg'; // Add your Gemini API key here
         
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -426,10 +430,13 @@
             }
         }
 
-        // Rule-based Script Analysis
+        // Gemini AI Script Analysis
         async function analyzeScript() {
             const file = document.getElementById('scriptFile').files[0];
-            if (!file) return;
+            if (!file) {
+                document.getElementById('phase1Error').innerHTML = '<div class="error">Please select a script file</div>';
+                return;
+            }
 
             document.getElementById('analysisLoader').classList.remove('hidden');
             
@@ -437,9 +444,9 @@
             reader.onload = async (e) => {
                 try {
                     const scriptText = e.target.result;
-                    const scenes = parseScript(scriptText);
+                    const scenes = await analyzeWithGemini(scriptText);
                     
-                    // Delete existing scenes for this project first
+                    // Delete existing scenes
                     await supabase.from('scenes').delete().eq('project_id', currentProject.id);
                     
                     // Insert new scenes
@@ -447,11 +454,26 @@
                         const { data, error } = await supabase.from('scenes').insert([{
                             project_id: currentProject.id,
                             scene_number: scene.scene_number,
-                            heading: scene.heading,
-                            location_type: scene.location_type,
-                            specific_location: scene.specific_location,
-                            time_of_day: scene.time_of_day,
-                            content: scene.content
+                            heading: scene.heading || `Scene ${scene.scene_number}`,
+                            location_type: scene.location_type || 'INT',
+                            specific_location: scene.specific_location || 'Unknown',
+                            time_of_day: scene.time_of_day || 'DAY',
+                            characters_present: scene.characters_present,
+                            speaking_roles: scene.speaking_roles,
+                            extras: scene.extras,
+                            functional_props: scene.functional_props,
+                            decorative_props: scene.decorative_props,
+                            camera_movement: scene.camera_movement,
+                            framing: scene.framing,
+                            lighting: scene.lighting,
+                            lighting_mood: scene.lighting_mood,
+                            diegetic_sounds: scene.diegetic_sounds,
+                            scene_mood: scene.scene_mood,
+                            emotional_arc: scene.emotional_arc,
+                            primary_action: scene.primary_action,
+                            pacing: scene.pacing,
+                            shoot_type: scene.shoot_type,
+                            content: scene.content || ''
                         }]).select();
                         
                         if (error) throw error;
@@ -460,7 +482,7 @@
                     
                     allScenes = scenes;
                     displayScenesForReview();
-                    document.getElementById('phase1Error').innerHTML = `<div class="success">Successfully parsed ${scenes.length} scenes!</div>`;
+                    document.getElementById('phase1Error').innerHTML = `<div class="success">Successfully analyzed ${scenes.length} scenes with Gemini AI!</div>`;
                 } catch (error) {
                     document.getElementById('phase1Error').innerHTML = `<div class="error">${error.message}</div>`;
                 } finally {
@@ -468,6 +490,100 @@
                 }
             };
             reader.readAsText(file);
+        }
+
+        async function analyzeWithGemini(scriptText) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
+            
+            // Limit script length to avoid token issues
+            const maxLength = 20000;
+            const limitedScript = scriptText.length > maxLength ? scriptText.substring(0, maxLength) : scriptText;
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: `You are a professional script analyst. Analyze this film script and break it into scenes.
+
+CRITICAL INSTRUCTIONS:
+1. Return ONLY valid JSON - no explanations or markdown
+2. Keep ALL field values SHORT (max 80 characters each)
+3. Replace double quotes in content with single quotes
+4. Be concise and direct
+
+SCRIPT TO ANALYZE:
+${limitedScript}
+
+Return a JSON array with these fields for each scene (keep brief):
+- scene_number: number
+- heading: brief scene heading
+- location_type: INT or EXT
+- specific_location: location name
+- time_of_day: DAY/NIGHT/EVENING/etc
+- characters_present: character names only
+- speaking_roles: speaking character names
+- extras: extras description
+- functional_props: key props list
+- decorative_props: decorative items
+- camera_movement: camera description
+- framing: shot framing
+- lighting: lighting description
+- lighting_mood: lighting mood
+- diegetic_sounds: sounds in scene
+- scene_mood: emotional mood
+- emotional_arc: emotion progression
+- primary_action: main action
+- pacing: scene pacing
+- shoot_type: interior/exterior/etc
+- content: scene dialogue and action (use single quotes only)`
+                            }]
+                        }],
+                        generationConfig: {
+                            temperature: 0.2,
+                            maxOutputTokens: 8000,
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error: ${errorData.error?.message || response.statusText}`);
+                }
+
+                const result = await response.json();
+                
+                if (!result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    throw new Error('Invalid API response structure');
+                }
+                
+                let jsonText = result.candidates[0].content.parts[0].text;
+                
+                // Aggressive cleaning
+                jsonText = jsonText
+                    .replace(/```json\n?/g, '')
+                    .replace(/```\n?/g, '')
+                    .replace(/[\u0000-\u001F]+/g, '')
+                    .trim();
+                
+                const scenes = JSON.parse(jsonText);
+                
+                if (!Array.isArray(scenes) || scenes.length === 0) {
+                    throw new Error('No scenes extracted from script');
+                }
+                
+                return scenes;
+                
+            } catch (error) {
+                console.error('Gemini error:', error);
+                if (error.message.includes('JSON')) {
+                    throw new Error('AI returned invalid format. Try uploading a cleaner script or contact support.');
+                }
+                throw new Error(`Analysis failed: ${error.message}`);
+            }
         }
 
         function parseScript(text) {
@@ -527,18 +643,137 @@
         }
 
         function displayScenesForReview() {
-            const html = allScenes.map(s => `
+            const html = allScenes.map((s, index) => `
                 <div class="scene-card">
-                    <h4>Scene ${s.scene_number}: <input type="text" value="${s.heading}" onchange="updateScene(${s.id}, 'heading', this.value)" style="width: 70%; display: inline-block;"></h4>
-                    <div class="grid-2">
-                        <input type="text" value="${s.location_type || ''}" placeholder="INT/EXT">
-                        <input type="text" value="${s.specific_location || ''}" placeholder="Location">
+                    <h4>Scene ${s.scene_number}: 
+                        <input type="text" value="${s.heading || ''}" 
+                               onchange="updateSceneField(${index}, 'heading', this.value)" 
+                               style="width: 60%; display: inline-block; background: rgba(0,123,255,0.1);">
+                    </h4>
+                    
+                    <div class="grid-2" style="margin-top: 1rem;">
+                        <div>
+                            <label style="color: #00d4ff; font-size: 0.9rem;">Location Type:</label>
+                            <select onchange="updateSceneField(${index}, 'location_type', this.value)" style="margin-bottom: 0.5rem;">
+                                <option value="INT" ${s.location_type === 'INT' ? 'selected' : ''}>INT</option>
+                                <option value="EXT" ${s.location_type === 'EXT' ? 'selected' : ''}>EXT</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color: #00d4ff; font-size: 0.9rem;">Specific Location:</label>
+                            <input type="text" value="${s.specific_location || ''}" 
+                                   onchange="updateSceneField(${index}, 'specific_location', this.value)">
+                        </div>
                     </div>
+
+                    <div class="grid-2">
+                        <div>
+                            <label style="color: #00d4ff; font-size: 0.9rem;">Time of Day:</label>
+                            <input type="text" value="${s.time_of_day || ''}" 
+                                   onchange="updateSceneField(${index}, 'time_of_day', this.value)">
+                        </div>
+                        <div>
+                            <label style="color: #00d4ff; font-size: 0.9rem;">Scene Mood:</label>
+                            <input type="text" value="${s.scene_mood || ''}" 
+                                   onchange="updateSceneField(${index}, 'scene_mood', this.value)">
+                        </div>
+                    </div>
+
+                    <details style="margin-top: 1rem;">
+                        <summary style="cursor: pointer; color: #00d4ff; font-weight: 600;">📝 Edit Advanced Details</summary>
+                        <div style="margin-top: 1rem;">
+                            <div class="grid-2">
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Characters Present:</label>
+                                    <input type="text" value="${s.characters_present || ''}" 
+                                           onchange="updateSceneField(${index}, 'characters_present', this.value)">
+                                </div>
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Speaking Roles:</label>
+                                    <input type="text" value="${s.speaking_roles || ''}" 
+                                           onchange="updateSceneField(${index}, 'speaking_roles', this.value)">
+                                </div>
+                            </div>
+
+                            <div class="grid-2">
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Functional Props:</label>
+                                    <input type="text" value="${s.functional_props || ''}" 
+                                           onchange="updateSceneField(${index}, 'functional_props', this.value)">
+                                </div>
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Camera Movement:</label>
+                                    <input type="text" value="${s.camera_movement || ''}" 
+                                           onchange="updateSceneField(${index}, 'camera_movement', this.value)">
+                                </div>
+                            </div>
+
+                            <div class="grid-2">
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Lighting:</label>
+                                    <input type="text" value="${s.lighting || ''}" 
+                                           onchange="updateSceneField(${index}, 'lighting', this.value)">
+                                </div>
+                                <div>
+                                    <label style="color: #00d4ff; font-size: 0.9rem;">Primary Action:</label>
+                                    <input type="text" value="${s.primary_action || ''}" 
+                                           onchange="updateSceneField(${index}, 'primary_action', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details style="margin-top: 1rem;">
+                        <summary style="cursor: pointer; color: #0096ff;">📄 View/Edit Scene Content</summary>
+                        <textarea rows="8" style="margin-top: 1rem; font-family: monospace; white-space: pre-wrap;" 
+                                  onchange="updateSceneField(${index}, 'content', this.value)">${s.content || ''}</textarea>
+                    </details>
+
+                    <button onclick="saveSceneChanges(${index})" class="btn-success" style="margin-top: 1rem;">💾 Save Changes</button>
                 </div>
             `).join('');
             
             document.getElementById('scenesList').innerHTML = html;
             document.getElementById('sceneReview').classList.remove('hidden');
+        }
+
+        function updateSceneField(index, field, value) {
+            if (allScenes[index]) {
+                allScenes[index][field] = value;
+            }
+        }
+
+        async function saveSceneChanges(index) {
+            const scene = allScenes[index];
+            if (!scene || !scene.id) return;
+
+            try {
+                const { error } = await supabase.from('scenes')
+                    .update({
+                        heading: scene.heading,
+                        location_type: scene.location_type,
+                        specific_location: scene.specific_location,
+                        time_of_day: scene.time_of_day,
+                        characters_present: scene.characters_present,
+                        speaking_roles: scene.speaking_roles,
+                        functional_props: scene.functional_props,
+                        camera_movement: scene.camera_movement,
+                        lighting: scene.lighting,
+                        scene_mood: scene.scene_mood,
+                        primary_action: scene.primary_action,
+                        content: scene.content
+                    })
+                    .eq('id', scene.id);
+
+                if (error) throw error;
+                
+                document.getElementById('phase1Error').innerHTML = `<div class="success">Scene ${scene.scene_number} saved successfully!</div>`;
+                setTimeout(() => {
+                    document.getElementById('phase1Error').innerHTML = '';
+                }, 2000);
+            } catch (error) {
+                document.getElementById('phase1Error').innerHTML = `<div class="error">Error saving: ${error.message}</div>`;
+            }
         }
 
         async function approveAllScenes() {
